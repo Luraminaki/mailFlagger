@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Input
+senders.txt
+
+# Generated ban lists (derived from senders.txt - same personal data)
+banlists/
+*_blacklist.txt
+*_banlists/
+*_scores.csv
+mailflagger_state.txt
