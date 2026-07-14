@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-14
+
+### Fixed
+
+- `root_domain`'s optional PSL backend no longer consults the Public Suffix List's *private*
+  section (`include_psl_private_domains`), which included unrelated email/marketing platforms
+  that registered their own wildcard rule (e.g. `homesecuritypc.com`, `point2this.com`) - this
+  stopped every one of their spam customers' subdomains from collapsing at all, the opposite of
+  what root-domain collapsing is for. `MULTI_PART_SUFFIXES` (checked first) still covers the
+  domain-hacks we actually want (`uk.com`, `us.com`, ...); the PSL is now consulted only for
+  genuine ICANN ccTLD structure not worth hand-curating (e.g. Japan's `*.kobe.jp` rule).
+- `.gitignore` now covers `senders_*.txt`, not just the literal `senders.txt`.
+
 ## [0.4.0] - 2026-07-13
 
 ### Added

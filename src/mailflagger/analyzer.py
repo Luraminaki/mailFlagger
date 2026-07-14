@@ -10,19 +10,22 @@ logger = logging.getLogger(__name__)
 
 try:
     import tldextract
-    # cache_dir=None: never touch disk. suffix_list_urls=(): never fetch over the network,
-    # use only the frozen snapshot bundled with the package. include_psl_private_domains=True:
-    # also recognize domain-hack suffixes like `uk.com` (sold by registrars as if it were a
-    # ccTLD), not just ICANN-delegated TLDs.
-    _PSL = tldextract.TLDExtract(cache_dir=None, suffix_list_urls=(), include_psl_private_domains=True)
+    # cache_dir=None: never touch disk. suffix_list_urls=(): never fetch over the network, use
+    # only the frozen snapshot bundled with the package. include_psl_private_domains=False:
+    # ICANN-delegated suffixes only - the PSL's *private* section is opt-in and includes things
+    # like email/marketing platforms that registered a wildcard rule for unrelated reasons (e.g.
+    # cookie isolation), which would stop every one of their customers' spam subdomains from
+    # collapsing at all. MULTI_PART_SUFFIXES below covers the private-style domain-hacks (like
+    # `uk.com`) we actually care about, deliberately, instead of inheriting the PSL's full list.
+    _PSL = tldextract.TLDExtract(cache_dir=None, suffix_list_urls=(), include_psl_private_domains=False)
 except ImportError:
     _PSL = None
 
 # Second-level suffixes under which a domain's *third*-from-last label is the actual
-# registrable name (e.g. `mail.example.co.uk` -> `example.co.uk`, not `co.uk`).
-# Used as a fallback when the optional `publicsuffix2` dependency (`pip install
-# mailflagger[psl]`) isn't installed. This is a curated subset of the real Public Suffix
-# List (publicsuffix.org) covering the multi-part suffixes most commonly seen in practice.
+# registrable name (e.g. `mail.example.co.uk` -> `example.co.uk`, not `co.uk`), checked before
+# falling back to `tldextract`/ICANN suffix rules (see `root_domain`). This is a curated subset
+# of the Public Suffix List (publicsuffix.org) covering the multi-part suffixes and domain-hacks
+# (`uk.com`, `us.com`, ...) most commonly seen in practice.
 MULTI_PART_SUFFIXES = frozenset({
     'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'net.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'sch.uk',
     'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au',
@@ -95,13 +98,13 @@ def tld(domain: str) -> str:
 def root_domain(domain: str) -> str:
     """Collapses a domain to its registrable name, dropping any subdomains.
 
-    If the optional `tldextract` dependency is installed (`pip install mailflagger[psl]`), the
-    real Public Suffix List is used. Otherwise, this falls back to `MULTI_PART_SUFFIXES`:
-    usually the last two labels (e.g. `mail.spam.com` -> `spam.com`), but for domains registered
-    under a multi-part suffix (e.g. `mail.example.co.uk`), the last three labels are kept instead
-    (`example.co.uk`) so unrelated senders sharing a country-code suffix like `co.uk` aren't
-    merged together. A trailing dot (a technically valid absolute FQDN, e.g. `spam.com.`) is
-    stripped first so it doesn't get misread as an extra, empty label.
+    Checked in order: `MULTI_PART_SUFFIXES` (usually the last two labels, e.g. `mail.spam.com`
+    -> `spam.com`, but the last three under a curated multi-part suffix, e.g. `mail.example.co.uk`
+    -> `example.co.uk`); then, if the optional `tldextract` dependency is installed (`pip install
+    mailflagger[psl]`), the real ICANN Public Suffix List, for ccTLD structure too obscure to
+    curate (e.g. Japan's `*.kobe.jp` wildcard rule); then a plain last-two-labels fallback. A
+    trailing dot (a technically valid absolute FQDN, e.g. `spam.com.`) is stripped first so it
+    doesn't get misread as an extra, empty label.
 
     Args:
         domain (str): Domain to collapse (e.g. `mail.spam.com`).
@@ -110,18 +113,19 @@ def root_domain(domain: str) -> str:
         str: The registrable domain, or `domain` unchanged if it has fewer labels than needed.
     """
     domain = domain.rstrip('.')
+    parts = domain.split('.')
+    if len(parts) < 2:
+        return domain
+    last_two = '.'.join(parts[-2:])
+
+    if len(parts) >= 3 and last_two in MULTI_PART_SUFFIXES:
+        return '.'.join(parts[-3:])
 
     if _PSL is not None:
         via_psl = _PSL(domain).top_domain_under_public_suffix
         if via_psl:
             return via_psl
 
-    parts = domain.split('.')
-    if len(parts) < 2:
-        return domain
-    last_two = '.'.join(parts[-2:])
-    if len(parts) >= 3 and last_two in MULTI_PART_SUFFIXES:
-        return '.'.join(parts[-3:])
     return last_two
 
 

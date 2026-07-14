@@ -125,3 +125,13 @@ def test_root_domain_uses_real_public_suffix_list_when_installed():
     # for a registrable domain) - not in our curated MULTI_PART_SUFFIXES fallback list, so this
     # is only correct if the real PSL (via the optional `tldextract` dependency) is consulted.
     assert root_domain('mail.example.kobe.jp') == 'mail.example.kobe.jp'
+
+
+def test_root_domain_ignores_psl_private_domains():
+    pytest.importorskip('tldextract')
+    # These are ordinary domains that happen to be listed in the Public Suffix List's *private*
+    # section (e.g. an email/marketing platform registered a wildcard rule for unrelated reasons
+    # like cookie isolation). Treating them as suffixes would stop every one of their customers'
+    # subdomains from ever collapsing - the opposite of what root-domain collapsing is for.
+    assert root_domain('alert.homesecuritypc.com') == 'homesecuritypc.com'
+    assert root_domain('karima.point2this.com') == 'point2this.com'
